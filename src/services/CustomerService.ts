@@ -1,4 +1,3 @@
-// services/CustomerService.ts
 import { api } from "../shared/api";
 import { CustomerDTO } from "../dtos/CustomerDTO";
 
