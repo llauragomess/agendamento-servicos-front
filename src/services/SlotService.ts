@@ -28,3 +28,19 @@ export const completeSlot = async (
   const { data: completed } = await api.put(`/slot/${id}`, data);
   return completed;
 };
+
+export const getAvailableSlots = async (
+  professionalId: number,
+  serviceId: number
+): Promise<SlotDTO[]> => {
+  const { data } = await api.get(
+    `/slot/available?professionalId=${professionalId}&serviceId=${serviceId}`
+  );
+  return data;
+}
+
+export const scheduleSlot = async (slotId: number, customerId: number): Promise<SlotDTO[]> => {
+  const { data } = await api.post("/slot/schedule", { slotId, customerId });
+  return data;
+}
+

@@ -1,6 +1,11 @@
 import { api } from "../shared/api";
 import { CustomerDTO } from "../dtos/CustomerDTO";
 
+export async function getAllCustomers(): Promise<CustomerDTO[]> {
+  const { data } = await api.get("/customer");
+  return data;
+}
+
 export async function getCustomer(id: number) {
   const { data } = await api.get(`/customer/${id}`);
   return data;

@@ -1,8 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { SlotDTO, CreateSlotDTO, SlotStatusMap } from '../dtos/SlotDTO';
 import {
     getAllSlots,
-    getSlotById, cancelSlot, createSlot
+    getSlotById, cancelSlot, createSlot,
+    getAvailableSlots,
+    scheduleSlot
 } from '../services/SlotService';
 import { Button } from 'primereact/button';
 import { InputText } from 'primereact/inputtext';
@@ -13,8 +15,22 @@ import { Column } from 'primereact/column';
 import { Toast } from 'primereact/toast'
 import { ContentBox } from '../styles/section';
 import { Dialog } from 'primereact/dialog';
+import { getAllServices } from '../services/ServiceService';
+import { getAllProfessionals } from '../services/ProfessionalService';
+import { Dropdown, DropdownChangeEvent } from 'primereact/dropdown';
+import { getAllCustomers, getCustomer } from '../services/CustomerService';
 
 export default function SlotPage() {
+    const [services, setServices] = useState<{ id: number, name: string }[]>([]);
+    const [selectedService, setSelectedService] = useState<{ id: number, name: string } | null>(null);
+    const [professionals, setProfessionals] = useState<{ id: number, name: string }[]>([]);
+    const [selectedProfessional, setSelectedProfessional] = useState<{ id: number, name: string } | null>(null);
+    const [customer, setCustomer] = useState<{ id: number, name: string }[]>([]);
+    const [selectedCustomer, setSelectedCustomer] = useState<{ id: number, name: string } | null>(null);
+
+    const [loading, setLoading] = useState(false);
+
+    const [availableSlots, setAvailableSlots] = useState<SlotDTO[]>([]);
     const [slots, setSlots] = useState<SlotDTO[]>([]);
     const [buscaId, setBuscaId] = useState('');
     const [slotEncontrado, setSlotEncontrado] = useState<SlotDTO[] | null>(null);
@@ -31,17 +47,41 @@ export default function SlotPage() {
     });
 
     useEffect(() => {
-        carregarSlots();
+        (async () => {
+            try {
+                const [slotsData, servicesData, professionalsData, customers] = await Promise.all([
+                    getAllSlots(),
+                    getAllServices(),
+                    getAllProfessionals(),
+                    getAllCustomers()
+                ]);
+
+                setSlots(slotsData);
+                setServices(servicesData.map(s => ({ id: s.id!, name: s.name })));
+                setProfessionals(professionalsData.map(p => ({ id: p.id!, name: p.name })));
+                setCustomer(customers.map(c => ({ id: c.id!, name: c.name })));
+            } catch (error) {
+                toast.current?.show({ severity: 'error', summary: 'Erro', detail: 'Falha ao carregar dados iniciais.', life: 3000 });
+            }
+        })();
     }, []);
 
-    const carregarSlots = async () => {
-        try {
-            const data = await getAllSlots();
-            setSlots(data);
-        } catch {
-            toast.current?.show({ severity: 'error', summary: 'Erro', detail: 'N�o foi poss�vel carregar os agendamentos', life: 3000 });
-        }
-    };
+    useEffect(() => {
+        (async () => {
+            if (!selectedService || !selectedProfessional) {
+                setSlots([]);
+                return;
+            }
+
+            try {
+                const slotsData = await getAvailableSlots(selectedService.id, selectedProfessional.id);
+                setAvailableSlots(slotsData);
+            } catch (error) {
+                toast.current?.show({ severity: 'error', summary: 'Erro', detail: 'Falha ao carregar slots.', life: 3000 });
+            }
+
+        })();
+    }, [selectedService, selectedProfessional])
 
     const buscarPorId = async () => {
         if (buscaId === null || buscaId === '') return;
@@ -101,6 +141,28 @@ export default function SlotPage() {
         }
     }
 
+    const handleBookSlotClick = useCallback((slotId: number) => {
+        if (!selectedCustomer)
+            return toast.current?.show({
+                severity: 'warn',
+                summary: 'Aviso',
+                detail: 'Selecione um cliente antes de agendar um horário.',
+                life: 3000
+            });
+
+        try {
+            scheduleSlot(slotId, selectedCustomer.id);
+        }
+        catch {
+            toast.current?.show({
+                severity: 'error',
+                summary: 'Erro',
+                detail: 'Erro ao agendar horário.',
+                life: 3000
+            });
+        }
+    }, [selectedCustomer]);
+
     const abrirEditor = (Slot?: CreateSlotDTO) => {
         setFormData(Slot ?? {
             customerId: 0,
@@ -117,6 +179,109 @@ export default function SlotPage() {
     return (
         <ContentBox>
             <Toast ref={toast} />
+
+            <div style={{
+                padding: '1rem',
+                border: '1px solid #e5e7eb',
+                borderRadius: '0.5rem',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                marginBottom: '2rem'
+            }}>
+                <h2 style={{
+                    fontSize: '1.25rem',
+                    fontWeight: 600,
+                    marginBottom: '1rem'
+                }}>Buscar Horários Disponíveis</h2>
+
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr 1fr',
+                    gap: '1rem',
+                }}>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <label htmlFor="service-dropdown" style={{ marginBottom: '0.5rem' }}>
+                            Escolha o Serviço
+                        </label>
+                        <Dropdown
+                            id="service-dropdown"
+                            value={selectedService}
+                            options={services}
+                            onChange={(e: DropdownChangeEvent) => {
+                                const selectedId = e.target.value?.id
+                                const selectedService = services.find(s => s.id === selectedId);
+                                setSelectedService(selectedService ?? null);
+                            }}
+                            optionLabel="name"
+                            placeholder="Selecione um Serviço"
+                            style={{ width: '100%' }}
+                        />
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <label htmlFor="professional-dropdown" style={{ marginBottom: '0.5rem' }}>
+                            Escolha o Profissional
+                        </label>
+                        <Dropdown
+                            id="professional-dropdown"
+                            value={selectedProfessional}
+                            options={professionals}
+                            onChange={(e) => setSelectedProfessional(e.value)}
+                            optionLabel="name"
+                            placeholder="Selecione um Profissional"
+                            style={{ width: '100%' }}
+                        />
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <label htmlFor="professional-dropdown" style={{ marginBottom: '0.5rem' }}>
+                            Escolha o Cliente
+                        </label>
+                        <Dropdown
+                            id="professional-dropdown"
+                            value={selectedCustomer}
+                            options={customer}
+                            onChange={(e) => setSelectedCustomer(e.value)}
+                            optionLabel="name"
+                            placeholder="Selecione um Cliente"
+                            style={{ width: '100%' }}
+                        />
+                    </div>
+                </div>
+            </div>
+
+            {loading ? <p>Buscando horários...</p> : (
+                availableSlots.length > 0 && (
+                    <div style={{
+                        padding: '1rem',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '0.5rem',
+                        boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                        marginBottom: '2rem',
+                    }}>
+                        <h3 style={{
+                            fontWeight: 600,
+                            marginBottom: '1rem'
+                        }}>Horários Disponíveis:</h3>
+
+                        <div style={{
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            gap: '0.5rem'
+                        }}>
+                            {availableSlots.map((slot) => (
+                                <Button
+                                    key={slot.id!}
+                                    label={new Date(slot.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                    onClick={() => handleBookSlotClick(slot.id!)}
+                                    outlined
+                                    style={{ padding: '0.25rem' }}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                )
+            )}
+
 
             <div style={{ padding: '1.5rem' }}>
                 <div
@@ -168,7 +333,7 @@ export default function SlotPage() {
                             header="Data"
                             body={(rowData) => {
                                 const date = new Date(rowData.date);
-                                return new Intl.DateTimeFormat('pt-BR').format(date);
+                                return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(date);
                             }}
                         />
                         <Column field="customer.name" header="Cliente" />
