@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { SlotDTO, CreateSlotDTO } from '../dtos/SlotDTO';
+import { SlotDTO, CreateSlotDTO, SlotStatusMap } from '../dtos/SlotDTO';
 import {
     getAllSlots,
     getSlotById, cancelSlot, createSlot
-} from '../services/SlotSerive';
+} from '../services/SlotService';
 import { Button } from 'primereact/button';
 import { InputText } from 'primereact/inputtext';
 import { InputMask } from 'primereact/inputmask'
@@ -27,7 +27,7 @@ export default function SlotPage() {
         date: '',
         dateSlotFormatted: '',
         description: '',
-        status: ''
+        status: undefined
     });
 
     useEffect(() => {
@@ -109,7 +109,7 @@ export default function SlotPage() {
             date: '',
             description: '',
             dateSlotFormatted: '',
-            status: ''
+            status: undefined
         });
         setFormVisible(true);
     };
@@ -173,7 +173,11 @@ export default function SlotPage() {
                         />
                         <Column field="customer.name" header="Cliente" />
                         <Column field="professional.name" header="Profissional" />
-                        <Column field="status" header="Status" />
+                        <Column
+                            field="status"
+                            header="Status"
+                            body={(rowData: SlotDTO) => SlotStatusMap[rowData.status!] || 'Indefinido'}
+                        />
                         <Column
                             header="Ações"
                             style={{ textAlign: 'center' }}

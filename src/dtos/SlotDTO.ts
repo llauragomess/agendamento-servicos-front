@@ -2,6 +2,20 @@ import { CustomerDTO } from "./CustomerDTO";
 import { ProfessionalDTO } from "./ProfessionalDTO";
 import { ServiceDTO } from "./ServiceDTO";
 
+export enum SlotStatus {
+  Available = 1,
+  Scheduled = 2,
+  Canceled = 3,
+  Completed = 4
+}
+
+export const SlotStatusMap ={
+  1: 'Disponível',
+  2: 'Agendado',
+  3: 'Cancelado',
+  4: 'Concluído'
+}
+
 export interface SlotDTO {
   id?: number;
   customer: CustomerDTO;
@@ -10,7 +24,7 @@ export interface SlotDTO {
   date: string;
   dateSlotFormatted?: string;
   description: string;
-  status?: string;
+  status?: SlotStatus;
 }
 
 export interface CreateSlotDTO {
@@ -20,5 +34,5 @@ export interface CreateSlotDTO {
   date: string;
   dateSlotFormatted?: string;
   description: string;
-  status?: string;
+  status?: SlotStatus;
 }
