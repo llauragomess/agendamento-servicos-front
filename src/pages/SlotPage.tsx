@@ -18,7 +18,7 @@ import { Dialog } from 'primereact/dialog';
 import { getAllServices } from '../services/ServiceService';
 import { getAllProfessionals } from '../services/ProfessionalService';
 import { Dropdown, DropdownChangeEvent } from 'primereact/dropdown';
-import { getAllCustomers, getCustomer } from '../services/CustomerService';
+import { getAllCustomers } from '../services/CustomerService';
 
 export default function SlotPage() {
     const [services, setServices] = useState<{ id: number, name: string }[]>([]);
@@ -48,43 +48,54 @@ export default function SlotPage() {
 
     useEffect(() => {
         (async () => {
-            try {
-                const [slotsData, servicesData, professionalsData, customers] = await Promise.all([
-                    getAllSlots(),
-                    getAllServices(),
-                    getAllProfessionals(),
-                    getAllCustomers()
-                ]);
-
-                setSlots(slotsData);
-                setServices(servicesData.map(s => ({ id: s.id!, name: s.name })));
-                setProfessionals(professionalsData.map(p => ({ id: p.id!, name: p.name })));
-                setCustomer(customers.map(c => ({ id: c.id!, name: c.name })));
-            } catch (error) {
-                toast.current?.show({ severity: 'error', summary: 'Erro', detail: 'Falha ao carregar dados iniciais.', life: 3000 });
-            }
+            await fetchData();
         })();
     }, []);
 
+    const fetchData = async () => {
+        try {
+            const [slotsData, servicesData, professionalsData, customers] = await Promise.all([
+                getAllSlots(),
+                getAllServices(),
+                getAllProfessionals(),
+                getAllCustomers()
+            ]);
+
+            setSlots(slotsData);
+            setServices(servicesData.map(s => ({ id: s.id!, name: s.name })));
+            setProfessionals(professionalsData.map(p => ({ id: p.id!, name: p.name })));
+            setCustomer(customers.map(c => ({ id: c.id!, name: c.name })));
+        } catch (error) {
+            toast.current?.show({ severity: 'error', summary: 'Erro', detail: 'Falha ao carregar dados iniciais.', life: 3000 });
+        }
+    }
+
     useEffect(() => {
-        (async () => {
-            if (!selectedService || !selectedProfessional) {
-                setSlots([]);
-                return;
-            }
+        (async () => await fetchAvailableSlots())();
+    }, [selectedService, selectedProfessional])
 
-            try {
-                const slotsData = await getAvailableSlots(selectedService.id, selectedProfessional.id);
-                setAvailableSlots(slotsData);
-            } catch (error) {
-                toast.current?.show({ severity: 'error', summary: 'Erro', detail: 'Falha ao carregar slots.', life: 3000 });
-            }
+    const fetchAvailableSlots = useCallback(async () => {
+        if (!selectedService || !selectedProfessional) {
+            setSlots([]);
+            return;
+        }
 
-        })();
+        try {
+            setLoading(true);
+            const slotsData = await getAvailableSlots(selectedService.id, selectedProfessional.id);
+            setAvailableSlots(slotsData);
+        } catch (error) {
+            toast.current?.show({ severity: 'error', summary: 'Erro', detail: 'Falha ao carregar slots.', life: 3000 });
+        }
+        setLoading(false);
     }, [selectedService, selectedProfessional])
 
     const buscarPorId = async () => {
-        if (buscaId === null || buscaId === '') return;
+        if (buscaId === null || buscaId === '') {
+            setSlotEncontrado(null);
+            await fetchData();
+            return;
+        }
         try {
             const data = await getSlotById(Number(buscaId));
             setSlotEncontrado([data]);
@@ -124,7 +135,7 @@ export default function SlotPage() {
     const cancelarSlot = async (id: number) => {
         try {
             const result = await cancelSlot(id);
-            console.log(result)
+            await fetchData();
             toast.current?.show({
                 severity: 'warn',
                 summary: 'Removido',
@@ -141,7 +152,7 @@ export default function SlotPage() {
         }
     }
 
-    const handleBookSlotClick = useCallback((slotId: number) => {
+    const handleBookSlotClick = useCallback(async (slotId: number) => {
         if (!selectedCustomer)
             return toast.current?.show({
                 severity: 'warn',
@@ -151,7 +162,7 @@ export default function SlotPage() {
             });
 
         try {
-            scheduleSlot(slotId, selectedCustomer.id);
+            await scheduleSlot(slotId, selectedCustomer.id);
         }
         catch {
             toast.current?.show({
@@ -161,20 +172,18 @@ export default function SlotPage() {
                 life: 3000
             });
         }
+        await fetchAvailableSlots();
     }, [selectedCustomer]);
 
-    const abrirEditor = (Slot?: CreateSlotDTO) => {
-        setFormData(Slot ?? {
-            customerId: 0,
-            professionalId: 0,
-            serviceId: 0,
-            date: '',
-            description: '',
-            dateSlotFormatted: '',
-            status: undefined
-        });
-        setFormVisible(true);
-    };
+    const clearFilters = async () => {
+        setSelectedService(null);
+        setSelectedProfessional(null);
+        setSelectedCustomer(null);
+        setAvailableSlots([]);
+        setBuscaId('');
+        setSlotEncontrado(null);
+        await fetchData();
+    }
 
     return (
         <ContentBox>
@@ -192,6 +201,10 @@ export default function SlotPage() {
                     fontWeight: 600,
                     marginBottom: '1rem'
                 }}>Buscar Horários Disponíveis</h2>
+
+                <Button onClick={clearFilters} style={{ padding: '0.5rem 1rem', marginBottom: '1rem' }}>
+                    Limpar filtros
+                </Button>
 
                 <div style={{
                     display: 'grid',
@@ -213,7 +226,7 @@ export default function SlotPage() {
                             }}
                             optionLabel="name"
                             placeholder="Selecione um Serviço"
-                            style={{ width: '100%' }}
+                            style={{ width: '100%', padding: '0.5rem' }}
                         />
                     </div>
 
@@ -228,7 +241,7 @@ export default function SlotPage() {
                             onChange={(e) => setSelectedProfessional(e.value)}
                             optionLabel="name"
                             placeholder="Selecione um Profissional"
-                            style={{ width: '100%' }}
+                            style={{ width: '100%', padding: '0.5rem' }}
                         />
                     </div>
 
@@ -243,7 +256,7 @@ export default function SlotPage() {
                             onChange={(e) => setSelectedCustomer(e.value)}
                             optionLabel="name"
                             placeholder="Selecione um Cliente"
-                            style={{ width: '100%' }}
+                            style={{ width: '100%', padding: '0.5rem' }}
                         />
                     </div>
                 </div>
@@ -304,14 +317,6 @@ export default function SlotPage() {
                         label="Buscar Agendamento pelo ID"
                         icon="pi pi-search"
                         onClick={buscarPorId}
-                        style={{ fontSize: '0.9rem', padding: '0.4rem 0.75rem' }}
-                    />
-
-                    <Button
-                        label="Novo Agendamento"
-                        icon="pi pi-plus"
-                        severity="success"
-                        onClick={() => abrirEditor()}
                         style={{ fontSize: '0.9rem', padding: '0.4rem 0.75rem' }}
                     />
                 </div>
